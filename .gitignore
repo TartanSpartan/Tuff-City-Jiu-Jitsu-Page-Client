@@ -1,0 +1,36 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/test
+
+# production
+/build
+test/
+/dist
+/.next
+/.parcel-cache
+
+# misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+progress_log
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# sensitive information
+# consider tweaking the below ignore rules if e.g. signatures end up getting downloaded to this folder
+# /public/images
+/public/uploads
+/public/temp
