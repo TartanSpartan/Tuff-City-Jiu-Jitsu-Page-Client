@@ -1,70 +1,53 @@
-# Getting Started with Create React App
+# README
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+<div align="center">
+    <p style="text-align: center;">
+        <h1>Tuff City Jiu Jitsu Club Website Project: React Client</h1>
+    </p>
+</div>
 
-## Available Scripts
+<p align="center">
+    <img src="src/img/tuff_logo.jpg" width="350" title="Teaching practical self defence in westernmost Canada">
+</p>
 
-In the project directory, you can run:
+# Project Description: Renewed Development
 
-### `yarn start`
+Here is my React on Rails project to serve as a website for the Tofino "Tuff City" Jiu Jitsu Club. This website is intended to be a good resource for jiu-jitsu clubs around the world who are interested in developing support material for their training. This codebase is the React client/frontend side of it. Please also check out the server-side [Rails API](https://github.com/TartanSpartan/Tuff-City-Jiu-Jitsu-Page-API) on GitHub, which is the webserver backend for the application, running on a Postgres16 database.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+There are [previous versions of the website](https://github.com/TartanSpartan/Tuff-City-Jiu-Jitsu-Webpage/tree/development), based on older gemsets in the API, but development has been resumed in these new repositories with new gems and a more focused approach. Many of the controllers, models etc still have relevant logic and have been ported over. Eventually I will also be looking to upgrade the node dependencies in this React client to a modern framework. Meanwhile the frontend aesthetics and overall functionality continues to be augmented regularly.
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+# Key folders and files
 
-### `yarn test`
+* Dependencies are defined in the [package.json](package.json) and [package-lock.json](package-lock.json) files
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+* The src/components/ folder contains each key component of the app
 
-### `yarn build`
+* [SCSS](App.scss) is used for styling. The app is not mobile-optimized yet but that will be implemented subsequently for a nice, responsive design. For the time being desktop views are prioritized
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+* Everything is all bound together by the App.js file
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+* The src/img/ folder contains several useful image assets
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+* [requests.js](requests.js) bridges the client to the API and database, allowing us to make several important CRUD actions on various endpoints
 
-### `yarn eject`
+* To facilitate this, please ensure that the Rails server is running and accessible on your network configuration alongside the React one
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+* Refer to the [Rails API](https://github.com/TartanSpartan/Tuff-City-Jiu-Jitsu-Page-API) ReadMe for more information
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+# Roadmap for improved development, performance and deployment:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+Testing frameworks along the lines of Rspec for Rails e.g. Jest or Mocha.
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+Third party monitoring services, perhaps Google Analytics, etc.
 
-## Learn More
+A full and performant implementation of production builds and deployment.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Further information
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+For more information, please see the internal links below:
 
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `yarn build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- [Getting Started](Documentation/GettingStarted.md)
+- [Motivation and Planned Features](Documentation/MotivationAndPlannedFeatures.md)
+- There are some novel features, such as:
+- [Frontend Oauth implementation for Google and traditional form-based sign-in](src/components/SignInPage.js) [and sign-up](src/components/SignUpPage.js)
+- [Waiver](src/components/NewWaiverForm.js) [forms with signature drawing functionality](src/components/UpdateWaiverForm.js) 
