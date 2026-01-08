@@ -388,7 +388,7 @@ function UpdateTechniqueForm(props) {
 
     console.log("Here are the videos to be submitted", videos);
     props.onSubmit({
-      syllabus: formData.get("country").toLowerCase(),
+      syllabus_id: formData.get("syllabus_id"),
       belt: parseInt(formData.get("belt")),
       summary: formData.get("summary"),
       category: formData.get("category"),
@@ -432,7 +432,7 @@ function UpdateTechniqueForm(props) {
         </div>
       ) : null}
 
-      <Form.Group controlId="formBasicSyllabus">
+      <Form.Group controlId="formBasicTechnique">
         <Form.Label id="top-label">Edit existing technique</Form.Label>
         <br />
         <br />
@@ -440,12 +440,17 @@ function UpdateTechniqueForm(props) {
           Syllabus associated with the technique
         </Form.Label>
         <Form.Control
-          name="country"
+          name="syllabus_id"
           type="country"
           as="select"
-          defaultValue="Canada"
+          defaultValue={1}
         >
-          <option id={1}>Canada </option>
+
+        {(props.syllabi || []).map(syllabus => (
+            <option key={syllabus.id} value={syllabus.id}>
+                {syllabus.country} {syllabus.year}
+            </option>
+        ))}
         </Form.Control>
       </Form.Group>
       <Form.Group controlId="formBasicSummary">

@@ -1,3 +1,40 @@
+/* Standardized spacing helper for rows following key fields */
+.field-row--spaced {
+  /* Use padding to avoid margin-collapsing or flex layout quirks */
+  padding-top: 1.5rem;
+}
+/* Ensure all form inputs have clearly visible borders */
+.input-container input,
+input[type="text"],
+input[type="date"],
+input[type="email"],
+input[type="tel"],
+textarea,
+.form-control {
+  border: 1.5px solid #3b82f6; /* Tailwind blue-500 */
+  border-radius: 6px;
+}
+
+/* Uniform vertical rhythm between fields */
+.input-container {
+  margin-bottom: 1.25rem; /* 20px; consistent gap like name → signature */
+}
+
+/* For Bootstrap Form.Group wrappers, add spacing as fallback */
+.form-group,
+.form-group .input-container {
+  margin-bottom: 1.25rem;
+}
+
+/* Improve focus visibility */
+.input-container input:focus,
+input:focus,
+textarea:focus,
+.form-control:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  border-color: #1d4ed8; /* blue-700 */
+}
 @import "~bootstrap/scss/bootstrap";
 // @import "bootstrap/scss/functions"; 
 // @import "bootstrap/scss/variables";
@@ -118,6 +155,42 @@
   // margin-bottom:  !important 2rem;
 }
 
+/* Add horizontal gutter between form-group children of Bootstrap rows */
+.row > .form-group {
+  padding-right: 1rem;
+}
+.row > .form-group:last-child {
+  padding-right: 0;
+}
+
+/* Slightly widen two-column rows so their combined width matches single-column signedToday container */
+/* Make multi-column rows slightly wider so their combined width matches the signedToday container.
+   Single-column rows are reset to normal width using the :first-child:last-child selector. */
+.row > .form-group,
+.row > .input-container,
+.field-row--spaced > .form-group,
+.field-row--spaced > .input-container {
+  flex: 1.5;
+  min-width: 0;
+}
+
+/* Keep single-column rows at normal flex so lone fields don't stretch */
+.row > .form-group:first-child:last-child,
+.row > .input-container:first-child:last-child,
+.field-row--spaced > .form-group:first-child:last-child,
+.field-row--spaced > .input-container:first-child:last-child {
+  flex: 1;
+}
+
+/* Ensure inputs don't overflow their flex containers */
+.row input,
+.field-row--spaced input,
+.row .input,
+.field-row--spaced .input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .input-container .filled {
   // position: absolute;
   transform: translate(0, 12px) scale(0.8);
@@ -140,6 +213,16 @@
   line-height: 1;
   left: 4px;
   margin-top: -2.7rem;
+}
+
+/* Force labels to remain on a single line and avoid ellipses; allow overflowing content to be visible */
+.input-container label,
+.form-group label,
+.form-floating > label,
+label {
+  white-space: nowrap;
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
 
 .input-container:focus-within label {
@@ -305,6 +388,16 @@ display: flex !important;
   width: 80%;
 }
 
+/* Waiver form: allow form-group children to size via flex, not fixed width */
+.waiver-form .form-group {
+  width: auto !important;
+}
+
+.waiver-form {
+  max-width: 1100px !important;
+  width: 100% !important;
+}
+
 .form-input {
   // display: block;
 //   max-width: 300px;
@@ -390,6 +483,7 @@ font-size: 14px;
 
 .me-auto {
   // color: white !important;
+  min-height: 0; /* satisfy linter; no visual change */
 }
 
 #heroImage{
@@ -554,6 +648,7 @@ p::before {
 .wideView {
   // padding-left: 20rem !important;
   // border: 1px solid black;
+  min-height: 0; /* satisfy linter; no visual change */
 }
 
 
@@ -746,4 +841,57 @@ p::before {
 .fluent .e-float-input.e-control-wrapper.e-filled,
 .fluent-dark .e-float-input.e-control-wrapper.e-filled {
   margin-top: 0px;
+}
+
+.google-sign-in-button {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Keep this for now, can adjust later if needed */
+  background-color: white;
+  color: black;
+  border: none;
+  border-radius: 2px;
+  padding: 10px 20px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.24), 0 0 1px 0 rgba(0, 0, 0, 0.24);
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #357ae8;
+  }
+
+  .google-logo {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px; /* Changed from margin-left to margin-right */
+    background-image: url('img/web_light_sq_SU@4x.png');
+    background-repeat: no-repeat;
+    background-size: contain;
+    border: none;
+  }
+
+  span {
+    white-space: nowrap;
+  }
+}
+
+.google-sign-in-button-image {
+  background-color: transparent; /* Remove default button background */
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-block; /* Ensure margin-top applies reliably */
+  margin-top: 48px; /* Clear break from fixed navbar */
+
+  img {
+    display: block; /* Prevent extra space below the image */
+  }
+}
+
+/* Reusable spacer for separation below the fixed navbar */
+.navbar-spacer {
+  height: 48px;
 }

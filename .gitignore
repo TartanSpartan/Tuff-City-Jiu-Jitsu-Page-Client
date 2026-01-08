@@ -34,3 +34,23 @@ yarn-error.log*
 # /public/images
 /public/uploads
 /public/temp
+
+# Ignore backup files
+*.backup
+*.orig
+*.old
+
+# Ignore source map files in build outputs (already ignoring /build, but be explicit)
+/build/static/js/*.map
+
+# Ignore documentation user payload files
+Documentation/RailsAPIUserPayload.md
+src/components/AdminFormOverflow.js
+src/components/AdminFormSimple.js
+src/components/NewTechniqueFormSimple.js
+
+
+# IDE specific files
+.idea/ # JetBrains (RubyMine, IntelliJ)
+.vscode/ # VS Code
+

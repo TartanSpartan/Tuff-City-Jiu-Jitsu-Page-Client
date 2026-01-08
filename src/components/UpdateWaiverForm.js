@@ -216,7 +216,9 @@ function UpdateWaiverForm(props) {
       console.log("Testing a logical check", (props.waiver.organization_witness_signature !== null));
       console.log("Testing more", isAuthenticated && isAuthenticated.is_admin && (props.waiver.organization_witness_signature !== null));
       console.log("Testing all logic", isAuthenticated && isAuthenticated.is_admin && (props.waiver.organization_witness_signature !== null)  && (props.waiver.organization_witness_signature === ""));
-      console.log("Why isn't the emergency number working?", props.waiver.emergency_contact_number.length);
+      // console.log("Why isn't the emergency number working?", props.waiver.emergency_contact_number.length);
+      console.log("Why isn't the emergency number working?", props.waiver);
+
 
       const handleDownloadPdf = async () => {
         // The following is extra code before the main section which already works, to experiment and build a multi-page PDF
@@ -753,9 +755,9 @@ function UpdateWaiverForm(props) {
                 defaultValue={props.waiver.emergency_contact_number} 
                 placeholder=""
               />
-              <label className={props.waiver.emergency_contact_number.length > 0 && 'filled'} htmlFor={props.waiver.emergency_contact_number}>
+              {/* <label className={props.waiver.emergency_contact_number.length > 0 && 'filled'} htmlFor={props.waiver.emergency_contact_number}>
                 Emergency Contact Phone
-              </label>
+              </label> */}
             </div>
           </Form.Group>
           <Form.Group name="groupRelationship" controlId="formRelationship" style={{ flex: 1, margin: "0px" }}>

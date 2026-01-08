@@ -11,8 +11,6 @@ import facebook from '../img/facebook.png'
 import current_members from '../img/current_members.jpg'
 import "../App.scss";
 
-
-
 export class WhoAreWe extends React.Component {
     constructor(props) {
       super(props);
