@@ -49,6 +49,16 @@ src/components/AdminFormOverflow.js
 src/components/AdminFormSimple.js
 src/components/NewTechniqueFormSimple.js
 
+# Ignore .npm directory
+.npm/
+
+# Ignore OSX system image cache
+src/img/__MACOSX/*
+
+# Ignore cookie file used for debug
+cookies.txt
+
+
 
 # IDE specific files
 .idea/ # JetBrains (RubyMine, IntelliJ)
