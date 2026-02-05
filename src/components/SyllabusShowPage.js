@@ -1,8 +1,8 @@
 // Fetch all syllabus data and render here, not on the syllabus show page(s) (those will be for accessing specific syllabi and info about them)
 // Note: make the header's background colour a darker shade of gray so that the yellow font stands out more
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Technique, Syllabus, User } from "../requests";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Technique, Syllabus, User, TechniqueType } from "../requests";
 // import _ from "lodash";
 // ERROR: LODASH DOESN'T WORK NOW! Try to resolve this.
 // import AuthRoute from "./AuthRoute";
@@ -247,21 +247,30 @@ function getSyllabusLogo(country, year) {
   // return logoMap[key] || logoMap[`${country.toLowerCase()}_default`] || can_jc_logo; TODO: Fix with regard to import
 }
 
-export function SyllabusShowPage({ params, user }) {
+export function SyllabusShowPage({ params, user, location, history }) {
   // State setup
   const [syllabus, setSyllabus] = useState(null);
   const [belts, setBelts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Diagnostic logs to help debug missing nested techniques
-  console.log("SyllabusShowPage render props:", { params, user });
+  // Diagnostic logs to help debug missing nested techniques (kept minimal)
 
   // Derived state from props
   const isAdmin = user?.is_admin || false;
   // Access syllabusId from the params prop (mimicking react-router behavior)
   const currentSyllabusId = params?.syllabusId;
   console.log("SyllabusShowPage currentSyllabusId:", currentSyllabusId);
+
+  // Memoize grouped technique types per-belt to avoid recalculating on every render
+  const groupedTechniqueTypesCache = useMemo(() => {
+    const map = {};
+    (belts || []).forEach((belt) => {
+      const key = belt.id || belt.kyu_number;
+      map[key] = groupedTechniqueTypes(belt.technique_types || []);
+    });
+    return map;
+  }, [belts]);
 
   // Function to fetch data for a specific syllabus ID
   const fetchSyllabusData = useCallback(async (id) => {
@@ -274,7 +283,15 @@ export function SyllabusShowPage({ params, user }) {
     setError(null);
 
     try {
-      const syllabusResponse = await Syllabus.getLimitedView(id);
+      // Prefer JSON:API serialization to ensure technique_type attributes are included
+      let syllabusResponse;
+      try {
+        syllabusResponse = await Syllabus.getLimitedViewJsonApi(id);
+      } catch (e) {
+        // Fallback to the default limited view if forcing JSON:API fails
+        console.warn("getLimitedViewJsonApi failed, falling back to getLimitedView:", e);
+        syllabusResponse = await Syllabus.getLimitedView(id);
+      }
       const syllabusData = syllabusResponse.data || {};
       // JSON:API may include related resources in `included`.
       const included = syllabusResponse.included || [];
@@ -324,7 +341,7 @@ export function SyllabusShowPage({ params, user }) {
               // Try exact type:id lookup first, then fall back to any included resource with matching id.
               const res =
                 includedMap[`${ref.type}:${ref.id}`] ||
-                included.find((r) => r.id == ref.id || r.id == String(ref.id));
+                included.find((r) => r.id === ref.id || r.id === String(ref.id));
               if (res) return { id: parseInt(res.id), ...(res.attributes || {}) };
               return { id: parseInt(ref.id) };
             })
@@ -339,7 +356,7 @@ export function SyllabusShowPage({ params, user }) {
           let techniques = techniqueRefs.map((ref) => {
             const res =
               includedMap[`${ref.type}:${ref.id}`] ||
-              included.find((r) => r.id == ref.id || r.id == String(ref.id));
+              included.find((r) => r.id === ref.id || r.id === String(ref.id));
             if (res)
               return {
                 id: parseInt(res.id),
@@ -428,7 +445,211 @@ export function SyllabusShowPage({ params, user }) {
       );
 
       setSyllabus(syllabusData.attributes);
-      setBelts(processedBelts);
+      
+      // Fetch techniques separately since they may not be included in the syllabus response anymore
+      // This handles API performance optimizations that removed techniques from nested responses
+      let allTechniques = [];
+      try {
+        const techniquesResponse = await Technique.allBySyllabus(id);
+        console.log("[DEBUG] Techniques response from API:", techniquesResponse);
+        
+        // Handle different possible response formats (JSON:API or plain array)
+        if (techniquesResponse.data && Array.isArray(techniquesResponse.data)) {
+          // JSON:API format
+          allTechniques = techniquesResponse.data.map((t) => ({
+            id: parseInt(t.id),
+            ...(t.attributes || {}),
+            technique_type_id: t.attributes?.technique_type_id 
+              ? parseInt(t.attributes.technique_type_id) 
+              : (t.relationships?.technique_type?.data?.id 
+                ? parseInt(t.relationships.technique_type.data.id) 
+                : null),
+            belt_id: t.attributes?.belt_id 
+              ? parseInt(t.attributes.belt_id) 
+              : (t.relationships?.belt?.data?.id 
+                ? parseInt(t.relationships.belt.data.id) 
+                : null),
+          }));
+        } else if (Array.isArray(techniquesResponse)) {
+          // Plain array format
+          allTechniques = techniquesResponse.map((t) => ({
+            ...t,
+            id: parseInt(t.id),
+            technique_type_id: t.technique_type_id ? parseInt(t.technique_type_id) : null,
+            belt_id: t.belt_id ? parseInt(t.belt_id) : null,
+          }));
+        }
+        console.log("[DEBUG] Processed techniques:", allTechniques.slice(0, 3));
+      } catch (techErr) {
+        console.warn("[API Warning] Failed to fetch techniques separately:", techErr);
+      }
+
+      // Merge techniques into their respective belts
+      const beltsWithTechniques = processedBelts.map((belt) => {
+        const beltTechniques = allTechniques.filter((t) => t.belt_id === belt.id);
+        console.log(`[DEBUG] Belt ${belt.id} (kyu ${belt.kyu_number}) matched ${beltTechniques.length} techniques`);
+        return {
+          ...belt,
+          techniques: beltTechniques.length > 0 ? beltTechniques : belt.techniques,
+        };
+      });
+
+      // Ensure technique_types includes any types referenced by techniques but missing from the belt's technique_types
+      beltsWithTechniques.forEach((belt) => {
+        // Normalize existing technique type ids (ensure numbers)
+        belt.technique_types = (belt.technique_types || []).map((tt) => ({ ...tt, id: Number(tt.id) }));
+
+        const existingTypeIds = new Set((belt.technique_types || []).map((tt) => Number(tt.id)));
+        const techniquesReferencing = (belt.techniques || [])
+          .map((t) => (t && t.technique_type_id ? Number(t.technique_type_id) : null))
+          .filter(Boolean);
+
+        // Diagnostic: log the current ids to help debug mismatches
+        console.log(`[DIAG] Belt ${belt.id} existingTypeIds:`, Array.from(existingTypeIds));
+        console.log(`[DIAG] Belt ${belt.id} techniquesReferenceTypeIds:`, techniquesReferencing);
+
+        techniquesReferencing.forEach((ttId) => {
+          if (!existingTypeIds.has(ttId)) {
+            // Try to find a matching technique_type resource in the top-level included map
+            const includedRes =
+              included.find((r) => Number(r.id) === ttId && String(r.type).toLowerCase().includes("technique")) ||
+              included.find((r) => Number(r.id) === ttId);
+
+            if (includedRes) {
+              const ttAttr = includedRes.attributes || {};
+              belt.technique_types = belt.technique_types || [];
+              belt.technique_types.push({
+                id: Number(includedRes.id),
+                ...ttAttr,
+                category: ttAttr.category || ttAttr.sub_category || `Type ${includedRes.id}`,
+              });
+              existingTypeIds.add(Number(includedRes.id));
+              console.log(`[DIAG] Added technique_type from included for belt ${belt.id}:`, Number(includedRes.id));
+            } else {
+              // Last resort: create a placeholder technique_type so the UI renders a header
+              belt.technique_types = belt.technique_types || [];
+              belt.technique_types.push({ id: ttId, category: `Type ${ttId}` });
+              existingTypeIds.add(ttId);
+              console.log(`[DIAG] Added placeholder technique_type for belt ${belt.id}:`, ttId);
+            }
+          }
+        });
+
+        // Deduplicate technique_types by id and ensure categories exist
+        const deduped = Array.from(
+          new Map((belt.technique_types || []).map((t) => [Number(t.id), { ...t, id: Number(t.id) }])).values()
+        ).map((t) => ({
+          ...t,
+          category: t.category || t.sub_category || `Type ${t.id}`,
+        }));
+
+        // Sort technique_types to make rendering deterministic (by id)
+        deduped.sort((a, b) => Number(a.id) - Number(b.id));
+        belt.technique_types = deduped;
+        console.log(`[DIAG] Belt ${belt.id} final technique_types:`, belt.technique_types.map((t) => t.id));
+      });
+
+      // Identify technique_type ids that still look like placeholders (e.g., category "Type N")
+      const placeholderTypeIds = new Set();
+      beltsWithTechniques.forEach((belt) => {
+        (belt.technique_types || []).forEach((tt) => {
+          const cat = tt.category || tt.sub_category || "";
+          if (!cat || /^Type\s*\d+$/i.test(String(cat).trim())) {
+            placeholderTypeIds.add(Number(tt.id));
+          }
+        });
+      });
+
+      // Merge any recently-created technique passed via navigation state so it appears immediately
+      try {
+        const recent = location?.state?.recentCreatedTechnique;
+        const recentType = location?.state?.recentTechniqueType;
+        if (recent) {
+          // Cache the technique_type payload if present
+          if (recentType && recentType.id) {
+            try {
+              TechniqueType.setCached(recentType.id, recentType);
+            } catch (e) {}
+          }
+
+          // Merge the recent technique into the appropriate belt if it matches this syllabus
+          const normRecent = {
+            id: Number(recent.id),
+            summary: recent.summary || "",
+            technique_type_id: recent.technique_type_id ? Number(recent.technique_type_id) : null,
+            belt_id: recent.belt_id ? Number(recent.belt_id) : null,
+            created_at: recent.created_at || new Date().toISOString(),
+          };
+          beltsWithTechniques.forEach((belt) => {
+            if (belt.id === normRecent.belt_id) {
+              belt.techniques = belt.techniques || [];
+              // Prevent duplicates
+              if (!belt.techniques.some((t) => Number(t.id) === Number(normRecent.id))) {
+                belt.techniques = [normRecent, ...belt.techniques];
+              }
+            }
+          });
+
+          // Clear the navigation state to avoid reapplying on back/forward
+          try {
+            const newState = { ...(location.state || {}) };
+            delete newState.recentCreatedTechnique;
+            delete newState.recentTechniqueType;
+            history.replace(location.pathname + (location.search || ""), newState);
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.warn("Failed merging recentCreatedTechnique:", e);
+      }
+
+      // Pre-warm missing technique_type metadata before rendering to avoid placeholder flicker
+      if (placeholderTypeIds.size > 0) {
+        try {
+          const fetches = Array.from(placeholderTypeIds).map((id) =>
+            TechniqueType.get(id).then((res) => ({ id, res })).catch((e) => ({ id, res: null, err: e }))
+          );
+          const fetched = await Promise.all(fetches);
+
+          const fetchedMap = fetched.reduce((acc, item) => {
+            if (item && item.res) acc[item.id] = item.res;
+            return acc;
+          }, {});
+
+          // Integrate fetched attributes into technique_types
+          const updatedBelts = beltsWithTechniques.map((belt) => {
+            const updatedTypes = (belt.technique_types || []).map((tt) => {
+              const fetchedData = fetchedMap[Number(tt.id)];
+              if (fetchedData) {
+                const payload = fetchedData.data || fetchedData;
+                const attrs = payload.attributes || payload;
+                const category = attrs.category || attrs.sub_category || tt.category || `Type ${tt.id}`;
+                return {
+                  ...tt,
+                  ...attrs,
+                  id: Number(tt.id),
+                  category,
+                };
+              }
+              return tt;
+            });
+            return {
+              ...belt,
+              technique_types: updatedTypes,
+            };
+          });
+
+          setBelts(updatedBelts);
+          console.log("[DIAG] Pre-warmed technique_type details:", Object.keys(fetchedMap));
+        } catch (e) {
+          console.warn("[DIAG] Failed pre-warming technique_type details:", e);
+          // Fallback to render whatever we have
+          setBelts(beltsWithTechniques);
+        }
+      } else {
+        setBelts(beltsWithTechniques);
+      }
+
+      setIsLoading(false);
     } catch (err) {
       console.error("[API Error] Failed to load syllabus:", err);
       setError(`Failed to load syllabus data for ID ${id}.`);
@@ -516,24 +737,6 @@ export function SyllabusShowPage({ params, user }) {
     }
   }, [isLoading, belts]);
 
-  // Diagnostic: log syllabus and belts whenever they change
-  useEffect(() => {
-    console.log("SyllabusShowPage syllabus state:", syllabus);
-    console.log("SyllabusShowPage belts state (count):", (belts || []).length);
-    console.log("SyllabusShowPage belts sample:", (belts || []).slice(0, 5));
-    // Extra diagnostics for nested belts shape
-    try {
-      console.log("SyllabusShowPage syllabus.belts (raw):", syllabus?.belts);
-      console.log("SyllabusShowPage syllabus.belts.data:", syllabus?.belts?.data);
-      console.log(
-        "SyllabusShowPage syllabus.belts keys:",
-        syllabus && typeof syllabus === "object" ? Object.keys(syllabus) : null
-      );
-    } catch (e) {
-      console.warn("Error logging nested syllabus belts diagnostics:", e);
-    }
-  }, [syllabus, belts]);
-
   // Function to delete a technique
   const deleteTechnique = (id) => {
     // The original class component's delete was simplistic, we'll keep that
@@ -559,7 +762,10 @@ export function SyllabusShowPage({ params, user }) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-700">
-        <h2 className="text-2xl font-semibold mb-4">Loading Syllabus</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+          <div className="spinner-border text-primary" role="status" aria-hidden="true"></div>
+          <h2 className="text-2xl font-semibold">Loading Syllabus</h2>
+        </div>
         <p>Fetching belt and technique data...</p>
       </div>
     );
@@ -658,7 +864,7 @@ export function SyllabusShowPage({ params, user }) {
           {/* 2. CONSTRAINED BELT CONTENT (Techniques) */}
           <div className="central max-w-4xl mx-auto p-4 md:p-8 pt-0">
             {/* Iterate through grouped technique types for the current belt */}
-            {groupedTechniqueTypes(belt.technique_types || []).map((techniqueTypeGroup) => {
+            {(groupedTechniqueTypesCache[belt.id || belt.kyu_number] || []).map((techniqueTypeGroup) => {
               const category = techniqueTypeGroup[0].category;
               const headerInfo = CATEGORY_STYLES[category] || {
                 content: category + ":",
@@ -690,13 +896,14 @@ export function SyllabusShowPage({ params, user }) {
                   {/* Technique Boxes */}
                   {!isSeparator &&
                     techniqueTypeGroup.map((technique_type) => {
+                      // Debug: Log technique_type and matching techniques
+                      const matchingTechniques = (belt.techniques || []).filter(
+                        (technique) => technique.technique_type_id === technique_type.id
+                      );
+                      // NOTE: Detailed per-technique diagnostics removed to reduce console noise
                       return (
                         <div key={technique_type.id} className="mt-4">
-                          {(belt.techniques || [])
-                            .filter(
-                              (technique) => technique.technique_type_id === technique_type.id
-                            )
-                            .map((element) => {
+                          {matchingTechniques.map((element) => {
                               return (
                                 <div
                                   key={element.id}

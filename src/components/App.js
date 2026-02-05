@@ -11,7 +11,10 @@ import { SignUpPage } from "./SignUpPage";
 import { User, Session, Technique, Syllabus } from "../requests";
 // import { SyllabusIndexPage } from "./SyllabusIndexPage";
 // import { SignatureForm } from "./SignatureForm";
-import { SyllabusShowPage } from "./SyllabusShowPage";
+// Lazy-load SyllabusShowPage to reduce initial bundle size
+const SyllabusShowPage = React.lazy(() =>
+  import("./SyllabusShowPage").then((mod) => ({ default: mod.SyllabusShowPage }))
+);
 import SyllabusMindmapPage from "./SyllabusMindmapPage";
 import TechniqueNewPage from "./TechniqueNewPage";
 import TechniqueShowPage from "./TechniqueShowPage";
@@ -119,26 +122,44 @@ class App extends React.Component {
 
   fetchPrimarySyllabus = async () => {
     try {
+      // Prefer the dedicated endpoint to fetch the single primary syllabus
+      try {
+        const primaryResp = await Syllabus.getPrimary();
+        console.log("getPrimary response:", primaryResp);
+
+        // Support both JSON:API style ({ data: { id, attributes } }) and direct object
+        const primaryData = primaryResp?.data || primaryResp;
+        if (primaryData && (primaryData.attributes || primaryData.country)) {
+          const primary = primaryData.attributes
+            ? { id: Number(primaryData.id), ...primaryData.attributes }
+            : primaryData;
+          console.log("Primary syllabus from getPrimary:", primary);
+          this.setState({ primarySyllabus: primary });
+          return;
+        }
+      } catch (err) {
+        console.warn("Syllabus.getPrimary() failed or returned no data, falling back to Syllabus.all():", err);
+      }
+
+      // Fallback: fetch all syllabi and pick the one flagged primary (or first)
       const syllabiResponse = await Syllabus.all();
+      console.log("Syllabi response (raw):", syllabiResponse);
 
-      // Assuming the same normalization logic as used in AdminPage.js
-      const rawSyllabi = Array.isArray(syllabiResponse)
-        ? syllabiResponse
-        : syllabiResponse?.data || [];
+      const rawSyllabi = Array.isArray(syllabiResponse) ? syllabiResponse : syllabiResponse?.data || [];
+      const normalizedSyllabi = rawSyllabi.map((item) => ({ id: Number(item.id), ...item.attributes }));
+      console.log("Normalized syllabi:", normalizedSyllabi);
 
-      const normalizedSyllabi = rawSyllabi.map((item) => ({
-        id: Number(item.id),
-        ...item.attributes,
-      }));
-
-      // Find the syllabus marked as primary
-      const primary = normalizedSyllabi.find((s) => s.is_primary_admin_syllabus);
+      let primary = normalizedSyllabi.find((s) => s.is_primary_admin_syllabus);
+      if (!primary && normalizedSyllabi.length > 0) {
+        console.warn("No syllabus explicitly marked primary in list; using first syllabus as fallback.");
+        primary = normalizedSyllabi[0];
+      }
 
       if (primary) {
-        console.log("Found primary syllabus:", primary);
+        console.log("Using primary syllabus:", primary);
         this.setState({ primarySyllabus: primary });
       } else {
-        console.warn("No primary syllabus found.");
+        console.warn("No primary syllabus available.");
         this.setState({ primarySyllabus: null });
       }
     } catch (error) {
@@ -210,6 +231,7 @@ class App extends React.Component {
     const { currentUser } = this.props;
     console.log("This is the state, let's find currentUser", this.state);
     console.log("This is the current user from Redux", currentUser);
+    console.log("App primarySyllabus:", primarySyllabus);
     console.log("This is the base URL", process.env.REACT_APP_BASE_URL);
     if (loading) {
       return <div />;
@@ -273,7 +295,18 @@ class App extends React.Component {
                   <AuthRoute
                     isAuthenticated={currentUser}
                     path="/syllabi/:id/user_grade_syllabus"
-                    component={SyllabusShowPage}
+                    render={(routeProps) => (
+                      <React.Suspense
+                        fallback={
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <div className="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                            <span>Loading syllabus...</span>
+                          </div>
+                        }
+                      >
+                        <SyllabusShowPage {...routeProps} user={currentUser} />
+                      </React.Suspense>
+                    )}
                   />
                   <AuthRoute
                     isAuthenticated={currentUser}

@@ -945,6 +945,7 @@ export class AdminPage extends React.Component {
                 as="select"
                 name="primarySyllabusSelect" // Used in the handler to get the value
                 defaultValue={primaryDefaultId}
+                key={`primary-select-${primaryDefaultId}`}
                 disabled={isPrimarySyllabusUpdating || isSecondarySyllabusUpdating}
                 className="shadow-sm border-blue-300 focus:ring-blue-500 focus:border-blue-500 appearance-none pr-10"
               >
@@ -1002,6 +1003,7 @@ export class AdminPage extends React.Component {
                 as="select"
                 name="secondarySyllabusSelect" // Used in the handler to get the value
                 defaultValue={secondaryDefaultId}
+                key={`secondary-select-${secondaryDefaultId}`}
                 disabled={isSecondarySyllabusUpdating || isPrimarySyllabusUpdating}
                 className="shadow-sm border-purple-300 focus:ring-purple-500 focus:border-purple-500 appearance-none pr-10"
               >
