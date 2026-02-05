@@ -281,6 +281,7 @@ export default class TechniqueNewPage extends Component {
 
     // --- 2. Find TechniqueType and get its ID ---
     let techniqueTypeId;
+    let typeResponse = null;
     try {
       // Wrap request parameters under 'technique_type' key and change to TechniqueType.find
       const typeRequestParams = {
@@ -292,7 +293,7 @@ export default class TechniqueNewPage extends Component {
         },
       };
 
-      const typeResponse = await TechniqueType.find(typeRequestParams);
+      typeResponse = await TechniqueType.find(typeRequestParams);
 
       // Try to extract the ID from common locations
       const typeIdFromResponse =
@@ -308,16 +309,18 @@ export default class TechniqueNewPage extends Component {
         ];
         this.setState({ errors: errs });
         // Reject so NewTechniqueForm's catch runs and avoids success-side effects
-        throw new Error(
-          Array.isArray(errs)
-            ? errs[0]?.message || String(errs[0])
-            : "Technique type validation failed"
-        );
+        throw new Error(JSON.stringify({ errors: errs }));
       }
 
       // Set the successfully retrieved ID
       techniqueTypeId = typeIdFromResponse;
       console.log("Found Technique Type ID (Attempt 3):", techniqueTypeId);
+      // Persist the technique type payload to the client cache so other pages see it immediately
+      try {
+        TechniqueType.setCached(techniqueTypeId, typeResponse);
+      } catch (e) {
+        console.warn("Failed to seed TechniqueType cache:", e);
+      }
     } catch (error) {
       console.error("Technique Type lookup error:", error);
       // Do not overwrite specific validation errors already set above.
@@ -359,11 +362,7 @@ export default class TechniqueNewPage extends Component {
 
       if (techniqueResponse.errors) {
         this.setState({ errors: techniqueResponse.errors });
-        throw new Error(
-          Array.isArray(techniqueResponse.errors)
-            ? techniqueResponse.errors[0]?.message || String(techniqueResponse.errors[0])
-            : "Technique creation failed"
-        );
+        throw new Error(JSON.stringify({ errors: techniqueResponse.errors }));
       }
     } catch (error) {
       console.error("Technique creation error:", error);
@@ -438,7 +437,26 @@ export default class TechniqueNewPage extends Component {
       if (targetSyllabusId) {
         const hash = beltKyu ? `#belt-kyu-${beltKyu}` : "";
         console.log(`Navigating to Syllabus ID ${targetSyllabusId} with hash`, hash || "(none)");
-        this.props.history.push(`/syllabi/${targetSyllabusId}/user_grade_syllabus${hash}`);
+
+        // Normalize created technique payload for passing in history state
+        const createdTechnique =
+          techniqueResponse?.data || techniqueResponse || { id: newTechniqueId };
+        const normalizedTechnique = {
+          id: Number(createdTechnique.id || newTechniqueId),
+          summary: createdTechnique.attributes?.summary || createdTechnique.summary || "",
+          technique_type_id:
+            Number(createdTechnique.attributes?.technique_type_id || createdTechnique.technique_type_id || techniqueTypeId || 0) || null,
+          belt_id: Number(createdTechnique.attributes?.belt_id || createdTechnique.belt_id || belt_id) || null,
+          created_at: createdTechnique.attributes?.created_at || createdTechnique.created_at || new Date().toISOString(),
+        };
+
+        // Also pass the technique type payload if available
+        const recentTechniqueType = typeResponse || null;
+
+        this.props.history.push(
+          `/syllabi/${targetSyllabusId}/user_grade_syllabus${hash}`,
+          { recentCreatedTechnique: normalizedTechnique, recentTechniqueType: recentTechniqueType }
+        );
       } else {
         console.error("Cannot navigate: Target Syllabus ID not found in submission.");
         this.props.history.push(`/`);

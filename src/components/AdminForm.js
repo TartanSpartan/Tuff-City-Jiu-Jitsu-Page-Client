@@ -1723,8 +1723,13 @@ function AdminForm({ currentUser, ...props }) {
       let errorMsg = "An unknown error occurred.";
 
       try {
-        const errorDetails = JSON.parse(error.message);
-        errorMsg = errorDetails.errors?.join(", ") || errorDetails.error || error.message;
+        let errorDetails = null;
+        try {
+          errorDetails = JSON.parse(error.message);
+        } catch {
+          errorDetails = null;
+        }
+        errorMsg = errorDetails?.errors?.join(", ") || errorDetails?.error || error.message;
       } catch {
         errorMsg = error.message;
       }

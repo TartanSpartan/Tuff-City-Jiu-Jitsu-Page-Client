@@ -4,6 +4,24 @@ import axios from "axios";
 
 // TODO: Try to do a console.log(return value) to find the errant "<" which is an error complained about in the browser console
 
+// Safe JSON parsing helper to avoid uncaught JSON.parse errors when the server
+// returns HTML or other non-JSON content (common for 5xx error pages).
+function safeJsonParse(text, context = "") {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    try {
+      console.error(`[safeJsonParse] failed to parse JSON (${context}):`, e);
+      // Log a short excerpt of the payload to help debugging (keeps console output small)
+      if (typeof text === "string") console.error(text.slice(0, 200));
+    } catch (ee) {
+      /* ignore logging failures */
+    }
+    return null;
+  }
+}
+
 function getJwt() {
   return localStorage.getItem("jwt");
 }
@@ -278,6 +296,19 @@ export const Syllabus = {
         return data;
       });
   },
+    // Request the limited view but force JSON:API serialization on the server
+    getLimitedViewJsonApi(id) {
+      return fetch(
+        `${process.env.REACT_APP_BASE_URL}/syllabi/${id}/user_grade_syllabus?use_jsonapi=1`,
+        {
+          credentials: "include",
+        }
+      )
+        .then(handleResponse)
+        .then((data) => {
+          return data;
+        });
+    },
   // TODO: The original TODO about the syllabus not being fully returned is likely fixed by the serializer's
   // inclusion of `includes(:techniques, :technique_types)`. Need to test this new endpoint!
 
@@ -523,33 +554,97 @@ export const TechniqueType = {
       credentials: "include",
     });
 
-    const data = await res.json();
+    // Be defensive when parsing server responses: the server may return HTML (e.g., 500 pages)
+    // which would cause res.json() to throw. Read text first and attempt a safe JSON parse.
+    const text = await res.text().catch(() => null);
+    const data = safeJsonParse(text, "TechniqueType.find") || (text ? { error: text } : {});
 
     // Check for success (200 OK) or unprocessable entity (422) which is the expected
     // error response when using find_or_create_by and validation fails.
     if (!res.ok) {
       // The backend returns { errors: [...] } for 422 status codes
-      return {
-        errors: data.errors || [
-          { message: `Server error during Technique Type processing (Status: ${res.status}).` },
-        ],
-      };
+      const errs = (data && data.errors) || (data && data.error) || `Server error during Technique Type processing (Status: ${res.status}).`;
+      if (Array.isArray(errs)) {
+        return { errors: errs };
+      }
+      return { errors: [{ message: errs }] };
     }
 
-    // Success (200 OK)
+    // Success (200 OK) — return parsed JSON or the raw text wrapped as `data`.
     return data;
   },
 
   // The previous find-by-ID logic is now named 'get' to prevent conflict.
+  // Simple in-memory cache to avoid refetching technique types repeatedly during a session
+  _cache: new Map(),
   get(id) {
+    const key = String(id);
+    const LOCAL_KEY = "technique_type_cache_v1";
+    const TTL_MS = 1000 * 60 * 60; // 1 hour
+
+    // 1) Check in-memory cache
+    if (TechniqueType._cache.has(key)) {
+      return Promise.resolve(TechniqueType._cache.get(key));
+    }
+
+    // 2) Check localStorage cache
+    try {
+      const raw = localStorage.getItem(LOCAL_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const entry = parsed[key];
+        if (entry && entry.ts && Date.now() - entry.ts < TTL_MS) {
+          TechniqueType._cache.set(key, entry.data);
+          return Promise.resolve(entry.data);
+        }
+      }
+    } catch (e) {
+      console.warn("TechniqueType cache read failed:", e);
+    }
+
+    // 3) Fetch from network
     return fetch(`${process.env.REACT_APP_BASE_URL}/technique_types/${id}`, {
       credentials: "include",
     }).then((res) => {
       if (res.status === 204) {
+        TechniqueType._cache.set(key, null);
+        // persist null to localStorage
+        try {
+          const raw = localStorage.getItem(LOCAL_KEY) || "{}";
+          const parsed = JSON.parse(raw);
+          parsed[key] = { ts: Date.now(), data: null };
+          localStorage.setItem(LOCAL_KEY, JSON.stringify(parsed));
+        } catch (e) {}
         return null;
       }
-      return res.json();
+      return res.json().then((data) => {
+        TechniqueType._cache.set(key, data);
+        // persist to localStorage
+        try {
+          const raw = localStorage.getItem(LOCAL_KEY) || "{}";
+          const parsed = JSON.parse(raw);
+          parsed[key] = { ts: Date.now(), data };
+          localStorage.setItem(LOCAL_KEY, JSON.stringify(parsed));
+        } catch (e) {
+          // ignore localStorage failures
+        }
+        return data;
+      });
     });
+  },
+  // Allow callers to seed the cache with a known payload (useful after creation)
+  setCached(id, payload) {
+    try {
+      const key = String(id);
+      TechniqueType._cache.set(key, payload);
+      const LOCAL_KEY = "technique_type_cache_v1";
+      const raw = localStorage.getItem(LOCAL_KEY) || "{}";
+      const parsed = JSON.parse(raw);
+      parsed[key] = { ts: Date.now(), data: payload };
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(parsed));
+    } catch (e) {
+      console.warn("TechniqueType.setCached failed:", e);
+    }
   },
 };
 
@@ -621,16 +716,25 @@ export const Technique = {
         data = await res.json();
       } else {
         const text = await res.text();
-        // Attempt to parse JSON if text looks like JSON; else wrap as error
+        // Diagnostic: log raw non-JSON response to help debugging
+        console.warn("Technique.create: non-JSON response (status", res.status, "):", text);
         try {
           data = JSON.parse(text);
-        } catch {
+        } catch (parseErr) {
+          // If parsing fails, wrap raw text into an error object
           data = { error: text };
         }
       }
     } catch (parseErr) {
-      console.warn("Technique.create: failed to parse response JSON:", parseErr);
-      data = { error: res.statusText };
+      // Log headers/status and raw text for debugging unexpected parse failures
+      try {
+        const rawText = await res.text();
+        console.error("Technique.create: parse error:", parseErr, "status:", res.status, "headers:", Array.from(res.headers.entries()), "raw:", rawText);
+        data = { error: rawText || res.statusText };
+      } catch (e) {
+        console.error("Technique.create: parse error and failed to read raw text:", e);
+        data = { error: res.statusText };
+      }
     }
 
     if (!res.ok) {
@@ -1260,7 +1364,11 @@ export const User = {
 
       // Handle successful response
       const responseText = await response.text();
-      return responseText ? JSON.parse(responseText) : {};
+      if (!responseText) return {};
+      const parsed = safeJsonParse(responseText, `User.update(${id})`);
+      if (parsed !== null) return parsed;
+      // If parsing failed, return the raw text in a harmless wrapper so callers can inspect it
+      return { raw: responseText };
     } catch (error) {
       // Re-throw the error
       throw error;
